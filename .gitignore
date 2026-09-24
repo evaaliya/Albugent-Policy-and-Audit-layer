@@ -1,0 +1,8 @@
+cat > .gitignore << 'EOF'
+venv/
+__pycache__/
+*.pyc
+.env
+data/actions_log.db
+data/receipts_ledger.jsonl
+EOF

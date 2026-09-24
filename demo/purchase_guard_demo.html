@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Purchase Guard — live demo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#05070D; --panel:#10131F; --panel2:#0B0E18; --line:#1E2436;
+    --text:#F1F3F8; --muted:#8A93A8;
+    --ok:#3FD68B; --monitor:#FFC24B; --halted:#FF5D6C;
+    --glow1:#12C2E9; --glow2:#7B5CFA; --glow3:#FF5FA8;
+    --sans:'DM Sans', ui-sans-serif, sans-serif;
+    --mono:'IBM Plex Mono', ui-monospace, Menlo, monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0; background:var(--bg); color:var(--text); font-family:var(--sans);
+    padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+  }
+  header{
+    padding:30px 28px 20px; border-bottom:1px solid var(--line);
+    display:flex; align-items:center; gap:18px;
+  }
+  .orb{
+    width:44px; height:44px; border-radius:50%; flex:none;
+    background:conic-gradient(from 180deg, var(--glow1), var(--glow2), var(--glow3), var(--glow1));
+    box-shadow:0 0 22px rgba(123,92,250,.55);
+    animation:spin 6s linear infinite;
+  }
+  @media (prefers-reduced-motion: reduce){ .orb{animation:none;} }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+  header h1{font-size:24px; margin:0 0 4px; font-weight:700; letter-spacing:-.01em;}
+  header p{margin:0; color:var(--muted); max-width:68ch; line-height:1.5; font-size:14px;}
+  .rule{font-family:var(--mono); font-size:11px; color:var(--glow1); margin-top:8px;}
+  .layout{
+    display:grid; grid-template-columns:1fr 1px 1fr; min-height:calc(100% - 130px);
+  }
+  .divider{background:var(--line);}
+  .col{padding:24px 26px;}
+  .col h2{font-size:12px; letter-spacing:.03em; color:var(--muted); margin:0 0 4px; font-family:var(--mono); font-weight:500;}
+  .col .sub{font-size:13px; color:var(--muted); margin:0 0 16px; line-height:1.5;}
+  label{display:block; font-size:12px; color:var(--muted); margin:12px 0 5px; font-family:var(--mono);}
+  input, select{
+    width:100%; background:var(--panel2); border:1px solid var(--line); color:var(--text);
+    padding:10px 12px; border-radius:10px; font-family:var(--sans); font-size:14px;
+  }
+  input:focus, select:focus{outline:2px solid var(--glow1); outline-offset:1px;}
+  button{
+    font-family:var(--sans); font-weight:700; font-size:13px; border:none; border-radius:999px;
+    padding:11px 20px; cursor:pointer; margin-top:16px;
+  }
+  .attempt-btn{background:linear-gradient(90deg,var(--glow1),var(--glow2)); color:#04121A;}
+  .reset-btn{background:transparent; color:var(--muted); border:1px solid var(--line); margin-left:8px;}
+  .card{
+    background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:14px 16px; margin-bottom:12px;
+  }
+  .card .top{display:flex; justify-content:space-between; align-items:baseline; gap:10px;}
+  .card .item{font-size:15px; font-weight:700;}
+  .badge{
+    font-family:var(--mono); font-size:11px; padding:3px 10px; border-radius:999px; letter-spacing:.02em;
+  }
+  .badge.OK{background:rgba(63,214,139,.16); color:var(--ok);}
+  .badge.MONITOR{background:rgba(255,194,75,.16); color:var(--monitor);}
+  .badge.HALTED{background:rgba(255,93,108,.16); color:var(--halted);}
+  .badge.APPROVED{background:rgba(63,214,139,.16); color:var(--ok);}
+  .badge.DENIED{background:rgba(255,93,108,.16); color:var(--halted);}
+  .meta{font-family:var(--mono); font-size:11px; color:var(--muted); margin-top:6px;}
+  .explain{font-size:13px; color:var(--text); margin-top:8px; line-height:1.5;}
+  .actions{margin-top:10px; display:flex; gap:8px;}
+  .approve{background:var(--ok); color:#04150C;}
+  .deny{background:var(--halted); color:#210407;}
+  .empty{color:var(--muted); font-size:13px; font-style:italic;}
+  .trust{font-family:var(--mono); font-size:12px; color:var(--muted); margin-bottom:16px;}
+  .phone-note{
+    font-size:12px; color:var(--muted); background:var(--panel2); border:1px dashed var(--line);
+    border-radius:10px; padding:10px 12px; margin-bottom:16px; line-height:1.5;
+  }
+  @media (max-width:820px){
+    .layout{grid-template-columns:1fr;}
+    .divider{display:none;}
+    .col:first-child{border-bottom:1px solid var(--line);}
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="orb"></div>
+  <div>
+    <h1>Purchase Guard</h1>
+    <p>A risk layer between Alexa+ and any purchase it tries to make for you. Attempts happen on the left, as the assistant. Approvals happen on the right, as you — the assistant has no button over there, no matter what you say out loud.</p>
+    <div class="rule">the system that requests a risky action can never approve it itself</div>
+  </div>
+</header>
+
+<div class="layout">
+  <div class="col">
+    <h2>ALEXA+ · voice &amp; conversation</h2>
+    <p class="sub">What the assistant can do: attempt a purchase and report back. That's the whole capability — there's no "yes, go ahead" it can act on for a halted one.</p>
+    <div class="trust" id="trustLine">agent trust score: 0.50</div>
+
+    <label>Item</label>
+    <input id="item" value="Gift card bundle">
+
+    <label>Category</label>
+    <select id="category">
+      <option value="electronics">electronics</option>
+      <option value="subscription">subscription</option>
+      <option value="dining">dining</option>
+      <option value="travel">travel</option>
+      <option value="luxury">luxury</option>
+      <option value="financial">financial</option>
+      <option value="loan">loan</option>
+      <option value="wire_transfer">wire_transfer</option>
+      <option value="gift_card" selected>gift_card</option>
+      <option value="gambling">gambling</option>
+      <option value="crypto">crypto</option>
+      <option value="other">other</option>
+    </select>
+
+    <label>Merchant</label>
+    <input id="merchant" value="random-giftcard-site">
+
+    <label>Amount (USD)</label>
+    <input id="amount" type="number" value="500" step="0.01">
+
+    <div>
+      <button class="attempt-btn" onclick="attemptPurchase()">"Alexa, buy this"</button>
+      <button class="reset-btn" onclick="resetDemo()">Reset session</button>
+    </div>
+
+    <div style="margin-top:22px;" id="agentLog"></div>
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="col">
+    <h2>ALEXA APP · your phone</h2>
+    <p class="sub">What only you can do here: approve or deny a halted attempt. This screen isn't reachable from the conversation on the left — in the real product it's a separate, account-linked service.</p>
+    <div class="phone-note">Saying "yes" to Alexa doesn't reach this screen. Only a tap here does.</div>
+    <div id="pendingLog"></div>
+  </div>
+</div>
+
+<script>
+const SEVERITY = {
+  wire_transfer:'High', gift_card:'High', gambling:'High', crypto:'High', loan:'High',
+  financial:'Medium', healthcare:'Medium', luxury:'Medium', subscription:'Low',
+  electronics:'Low', dining:'Low', travel:'Low', other:'Low'
+};
+const SEV_WEIGHT = {High:0.45, Medium:0.25, Low:0.10};
+
+let history = [];
+let trust = 0.5;
+let counter = 1;
+
+function mean(a){return a.reduce((x,y)=>x+y,0)/a.length;}
+function stdev(a){const m=mean(a); const v=mean(a.map(x=>(x-m)*(x-m))); return Math.sqrt(v)||1;}
+
+function decide(item, category, merchant, amount){
+  const flags = [];
+  const knownMerchants = new Set(history.map(h=>h.merchant));
+  if(history.length>0 && !knownMerchants.has(merchant)) flags.push('new_merchant');
+
+  const catAmounts = history.filter(h=>h.category===category).map(h=>h.amount);
+  if(catAmounts.length>=3){
+    const z = (amount-mean(catAmounts))/stdev(catAmounts);
+    if(z>=2) flags.push('amount_spike');
+  }
+  if(history.some(h=>h.item===item && h.merchant===merchant && h.amount===amount)) flags.push('duplicate_attempt');
+  if(history.length>=4) flags.push('frequency_spike');
+
+  const severity = SEVERITY[category] || 'Low';
+  const anomalyScore = Math.min(flags.length*0.15, 0.4);
+  const trustPenalty = (1-trust)*0.2;
+  const risk = Math.round(Math.min(SEV_WEIGHT[severity]+anomalyScore+trustPenalty, 1)*100)/100;
+
+  let status, reason;
+  if(risk>=0.65){ status='HALTED'; reason=`risk_score ${risk} >= threshold (category_severity=${severity}, anomaly_flags=[${flags.join(', ')}])`; }
+  else if(flags.length>0){ status='MONITOR'; reason=`anomaly_flags present: [${flags.join(', ')}]`; }
+  else { status='OK'; reason='no risk signals'; }
+
+  const priorHalted = history.some(h=>h.status==='HALTED');
+  if(priorHalted && status==='OK'){ status='MONITOR'; reason='inherited MONITOR: an earlier attempt in this session was HALTED'; }
+
+  return {status, reason, risk, flags, severity};
+}
+
+function explain(a){
+  if(a.status==='OK') return `Completed automatically. No risk signals.`;
+  if(a.status==='MONITOR') return `Completed, but flagged for review. ${a.reason}.`;
+  return `NOT completed — needs your approval in the Alexa app, not through the assistant. ${a.reason}.`;
+}
+
+function attemptPurchase(){
+  const item = document.getElementById('item').value.trim();
+  const category = document.getElementById('category').value;
+  const merchant = document.getElementById('merchant').value.trim();
+  const amount = parseFloat(document.getElementById('amount').value);
+  if(!item || !merchant || !(amount>0)) return;
+
+  const d = decide(item, category, merchant, amount);
+  const action = {id:'act_'+String(counter++).padStart(4,'0'), item, category, merchant, amount, ...d, resolution:null};
+  history.push(action);
+  render();
+}
+
+function resolve(id, approved){
+  const a = history.find(x=>x.id===id);
+  if(!a) return;
+  a.resolution = approved ? 'APPROVED' : 'DENIED';
+  trust = approved ? Math.min(1, trust+0.03) : Math.max(0, trust-0.15);
+  render();
+}
+
+function resetDemo(){ history=[]; trust=0.5; counter=1; render(); }
+
+function render(){
+  document.getElementById('trustLine').textContent = `agent trust score: ${trust.toFixed(2)}`;
+
+  const log = document.getElementById('agentLog');
+  log.innerHTML = history.length ? '' : '<div class="empty">No attempts yet.</div>';
+  [...history].reverse().forEach(a=>{
+    log.innerHTML += `<div class="card">
+      <div class="top"><span class="item">${a.item}</span><span class="badge ${a.status}">${a.status}</span></div>
+      <div class="meta">${a.id} · $${a.amount.toFixed(2)} · ${a.category} · ${a.merchant}</div>
+      <div class="explain">${explain(a)}</div>
+      ${a.resolution ? `<div class="meta">Tier 2 resolution: <span class="badge ${a.resolution}">${a.resolution}</span></div>` : ''}
+    </div>`;
+  });
+
+  const pending = document.getElementById('pendingLog');
+  const halted = history.filter(a=>a.status==='HALTED');
+  pending.innerHTML = halted.length ? '' : '<div class="empty">Nothing waiting on you right now.</div>';
+  [...halted].reverse().forEach(a=>{
+    pending.innerHTML += `<div class="card">
+      <div class="top"><span class="item">${a.item}</span><span class="badge ${a.resolution || a.status}">${a.resolution || a.status}</span></div>
+      <div class="meta">${a.id} · $${a.amount.toFixed(2)} · ${a.category} · ${a.merchant}</div>
+      <div class="explain">${a.reason}.</div>
+      ${a.resolution ? '' : `<div class="actions">
+        <button class="approve" onclick="resolve('${a.id}', true)">Approve</button>
+        <button class="deny" onclick="resolve('${a.id}', false)">Deny</button>
+      </div>`}
+    </div>`;
+  });
+}
+
+render();
+</script>
+</body>
+</html>
