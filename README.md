@@ -1,6 +1,3 @@
-<<<<<<< HEAD
-# Crowdsourced-Spatial-Episodic-Mapping
-=======
 # Albugent -> Alexa+ Purchase Guard
 
 An Alexa+ agent-trust layer for autonomous purchases, ported from the Albugent data
@@ -178,4 +175,4 @@ schemas, request/response payloads, and errors, which is exactly where the fixes
   integration (`ChargePermissionId` / partner wallet, per "Implement Checkout
   Endpoints") -- stubbed with a comment in `apply_resolution.py`.
 - The compliance-digest PR flow from `github_utils.py`.
->>>>>>> cda6206 (Initial commit: Albudit MCP purchase risk-gating server)
+
