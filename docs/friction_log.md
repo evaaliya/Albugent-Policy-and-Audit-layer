@@ -27,7 +27,3 @@ cat > FRICTION_LOG.md << 'EOF'
 - **Severity:** High — broke a previously-working demo with zero code changes on our side.
 - **Workaround:** Pinned `mcp[cli]>=1.10,<2.0.0` in `requirements.txt`.
 - **Actionable suggestion:** This is exactly the gap we filed against upstream — see our Open Source Mini Challenge contribution (docs/dual-support-1x-2x branch addressing issue #3309): a short "supporting both majors during transition" doc section would have saved us this entire debugging cycle.
-EOF
-git add FRICTION_LOG.md
-git commit -m "Add friction log"
-git push

@@ -97,6 +97,60 @@ shape as our HALTED -> Tier 2 approval step. Wiring `resolve_pending_action` to 
 actual charge (via `ChargePermissionId` / a partner-wallet checkout API) is future
 work, described in "Implement Checkout Endpoints" -- out of scope for this MVP.
 
+## Architecture
+
+```mermaid
+flowchart TB
+    Customer["Customer<br/>(voice or text)"]
+
+    subgraph Tier1["TIER 1 — Agent channel (Alexa+ MCP server, port 8000)"]
+        direction TB
+        AlexaPlus["Alexa+<br/>MCP client"]
+        Tools["Tools exposed:<br/>attempt_purchase<br/>get_session_status<br/>get_audit_trail<br/><br/>(no approve/deny tool exists here)"]
+        RiskEngine["Risk engine<br/>category severity + anomalies<br/>+ agent trust score"]
+        CircuitBreaker["Session circuit breaker<br/>(one HALT drags later<br/>steps in-session to MONITOR)"]
+        Decision{{"Decision"}}
+    end
+
+    subgraph Tier2["TIER 2 — Human channel (separate service, port 8010)"]
+        direction TB
+        HumanApp["Alexa app / account-linked<br/>identity (human only)"]
+        Resolve["resolve_pending_action<br/>APPROVE / DENY"]
+        Receipts[("Receipts ledger<br/>+ email")]
+    end
+
+    Customer -->|"buy / book / subscribe"| AlexaPlus
+    AlexaPlus --> Tools
+    Tools --> RiskEngine
+    RiskEngine --> CircuitBreaker
+    CircuitBreaker --> Decision
+
+    Decision -->|"OK"| Complete1["Purchase completes"]
+    Decision -->|"MONITOR"| Complete2["Purchase completes,<br/>flagged for review"]
+    Decision -->|"HALTED"| Blocked["Purchase NOT completed<br/>action_id returned"]
+
+    Complete1 --> Receipts
+    Complete2 --> Receipts
+
+    Blocked -.->|"action_id<br/>(no network path back to Tier 1)"| HumanApp
+    HumanApp --> Resolve
+    Resolve -->|"APPROVED"| Receipts
+    Resolve -->|"DENIED"| Dropped["Purchase stays blocked"]
+
+    style Tier1 fill:#10131f,stroke:#1e2436,color:#e7ecf3
+    style Tier2 fill:#0f1930,stroke:#1e2436,color:#e7ecf3
+    style Decision fill:#e0a93e,stroke:#e0a93e,color:#141414
+    style Blocked fill:#d9534f,stroke:#d9534f,color:#fff
+    style Complete1 fill:#46a578,stroke:#46a578,color:#fff
+    style Complete2 fill:#e0a93e,stroke:#e0a93e,color:#141414
+    style Resolve fill:#121b2e,stroke:#1e2436,color:#e7ecf3
+```
+
+The dashed arrow from `Blocked` to the human channel is deliberate: it's a dashed
+line, not a solid one, because there is no direct network path there -- only an
+`action_id` the customer carries over to a completely separate service.
+
+
 ## File-by-file mapping from Albugent
 
 | Albugent | Here |
