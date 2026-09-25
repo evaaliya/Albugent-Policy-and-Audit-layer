@@ -1,9 +1,11 @@
-# Albugent -> Alexa+ Purchase Guard
+# Alguard — an Alexa+ Purchase Guard
 
-An Alexa+ agent-trust layer for autonomous purchases, ported from the Albugent data
-governance engine, built strictly on Amazon's own MCP Toolkit for Alexa+
-(developer.amazon.com/docs/alexaplus/add-ons/). Same architecture, same hard rule,
-new domain:
+An Alexa+ agent-trust layer for autonomous purchases. The risk architecture here is
+ported from [Albugent](https://github.com/evaaliya/albugent_v2.0), a data-governance
+engine we built previously that scores datasets for risk and halts anything above a
+threshold pending human review -- categories and datasets became purchase attempts
+and sessions, but the core rule carried over unchanged, built strictly on Amazon's
+own MCP Toolkit for Alexa+ (developer.amazon.com/docs/alexaplus/add-ons/):
 
 > **The system that requests a risky action is never the system that approves it.**
 
@@ -150,23 +152,6 @@ The dashed arrow from `Blocked` to the human channel is deliberate: it's a dashe
 line, not a solid one, because there is no direct network path there -- only an
 `action_id` the customer carries over to a completely separate service.
 
-
-## File-by-file mapping from Albugent
-
-| Albugent | Here |
-|---|---|
-| `pii_detector.py` | `mcp_server/utils/category_risk.py` -- keyword+severity pattern, now for purchase categories |
-| `anomaly_profiler.py` | `mcp_server/utils/session_profiler.py` -- new-merchant / amount z-score / same-session frequency spike |
-| `risk_evaluator.py` | `mcp_server/utils/risk_evaluator.py` -- `category_severity + anomalies + (1 - trust) * weight`, 0.65 threshold |
-| `circuit_breaker.py` | `mcp_server/utils/circuit_breaker.py` -- HALT propagates through a session's chronological steps |
-| `context_builder.py` | `mcp_server/utils/context_builder.py` -- one decision payload per purchase attempt |
-| `agent.py`'s "LLM only writes prose from precomputed facts" | `mcp_server/utils/explain.py` -- deterministic for this MVP |
-| `patch_applier.py` (`apply_patch`, UI-only) | `web_api/apply_resolution.py` (`resolve_pending_action`, Tier-2-only) |
-| `mcp_server.py` (tool surface) | `mcp_server/server.py` |
-| `db_utils.py` | `mcp_server/utils/db_utils.py` -- same sqlite helpers, over `data/actions_log.db` |
-| `github_utils.py` | not ported -- approval must happen before the action, not async in a PR |
-| `graph_engine.py` / `lineage_discoverer.py` | dropped -- "merchant centrality" wasn't a clear risk signal |
-
 ## Running it
 
 ### Local development / logic check (no Amazon account needed)
@@ -201,32 +186,69 @@ alexa-ai deploy                    # registers the add-on, dev stage
 # then: Test in the Web Simulator (developer.amazon.com/alexa/console/ask/addons)
 ```
 
-### Pre-certification check: Local Inspector
-
-Before relying on the web simulator, `@alexa-ai/addon-local-inspector` can hit this
-server directly and produce a pass/fail `certification-verdict.json` against the
-Functional Requirements checklist:
-
-```bash
-addon-local-inspector https://your-tunnel-or-deployed-url.example.com/mcp
-```
-
-This server returns data only (no `_meta.ui.resourceUri`), so only **data-layer
-analysis** applies here -- no Playwright/visual-rendering setup needed. It checks tool
-schemas, request/response payloads, and errors, which is exactly where the fixes in
-"Corrections the Functional Requirements forced" above came from.
-
 ## What's intentionally NOT built yet
 
-- **Account Linking / OAuth 2.1 + PKCE(S256)**: the MCP Toolkit Authentication
-  checklist requires 401-without-`WWW-Authenticate` on unauthenticated requests, a
-  Protected Resource Metadata document at the RFC 9728 well-known URI, and an
-  `/.well-known/oauth-authorization-server` document. None of that is stubbed here --
-  it's real infrastructure that belongs in your Amazon developer console setup, not
-  something to fake in `mcp_server/server.py`. Until it exists,
-  `resolve_agent_identity()` logs a loud warning and returns a placeholder.
+- **A real OAuth authorization server**: `mcp_server/utils/auth_context.py` is now a
+  real, working OAuth 2.1 resource-server token verifier (JWT + JWKS, via the MCP
+  SDK's `TokenVerifier`/`AuthSettings`) -- point `OAUTH_JWKS_URL`, `OAUTH_ISSUER_URL`,
+  `OAUTH_AUDIENCE` at any real authorization server (Auth0, Cognito, Okta...) and it
+  validates real tokens. What's still missing is *running* that authorization
+  server and registering Alexa's redirect URIs with it -- see "Enable real OAuth"
+  below. Without those env vars set, the server runs with no auth at all (fine for
+  local dev, not for certification). Also note: the MCP SDK adds a `WWW-Authenticate`
+  header to 401 responses, which the Alexa+ Authentication checklist currently lists
+  as "Not Supported Yet" on their side -- flagged in a code comment, not fixed, since
+  it can't be tested against real Alexa+ without Private Preview access.
 - Real merchant execution after a Tier 2 approval, and the actual Alexa+ Checkout API
   integration (`ChargePermissionId` / partner wallet, per "Implement Checkout
   Endpoints") -- stubbed with a comment in `apply_resolution.py`.
-- The compliance-digest PR flow from `github_utils.py`.
 
+## Enable real OAuth (optional, for testing auth locally)
+
+Point these env vars at any OAuth 2.1 authorization server before starting
+`mcp_server.server` (a free Auth0 or Cognito test tenant works fine for this):
+
+```bash
+export OAUTH_JWKS_URL="https://your-auth-server.example.com/.well-known/jwks.json"
+export OAUTH_ISSUER_URL="https://your-auth-server.example.com/"
+export OAUTH_AUDIENCE="http://localhost:8000/mcp"
+export OAUTH_REQUIRED_SCOPES="purchase"   # optional, space-separated
+python -m mcp_server.server
+```
+
+`demo/simulate_session.py` doesn't send a Bearer token, so with auth enabled it will
+get rejected -- that's the point (proves the auth actually rejects unauthenticated
+callers). Leave the env vars unset to keep using the demo script as before.
+
+## Enable real Bedrock explanations (optional, AWS Builder Mini Challenge)
+
+By default, `explain.py`'s customer-facing explanation text is a deterministic
+template -- no AWS call, no dependency on boto3 even being installed. Setting
+`EXPLAIN_USE_BEDROCK=1` switches it to a real Amazon Bedrock Runtime call (the
+Converse API, Amazon Nova by default) that phrases the same already-computed facts
+as a sentence -- same principle as Albugent's `agent.py`: the model is given the
+facts and explicitly told not to add anything beyond them; it never re-derives
+`status` or `risk_score` itself.
+
+```bash
+export EXPLAIN_USE_BEDROCK=1
+export AWS_REGION=us-east-1
+export AWS_BEDROCK_MODEL_ID=amazon.nova-pro-v1:0   # or any Bedrock model your account can access
+# uses the standard boto3 credential chain (env vars / ~/.aws/credentials / role)
+python -m mcp_server.server
+```
+
+If the Bedrock call fails for any reason (no credentials, no model access, network
+error, empty response), `explain.py` logs a warning and falls back to the
+deterministic template automatically -- the customer never sees a raw error instead
+of an explanation.
+
+## View a delivered receipt
+
+Every completed purchase (`OK`/`MONITOR`, or a `HALTED` one a human later approves)
+writes a real receipt to `data/receipts_ledger.jsonl` and, if `SMTP_HOST` is
+configured, also emails it. Read one back via the Tier 2 service:
+
+```bash
+curl http://127.0.0.1:8010/receipts/<action_id>
+```
